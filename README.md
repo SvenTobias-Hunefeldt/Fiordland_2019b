@@ -1,2 +1,6 @@
 # Fiordland_2019b
-A repository for data required to replicate the paper.
+This is the code repository for the paper on the prokaryotic and eukaryotic community and metabolic potential within Fiordland, published in 2019.
+
+All pathways will have to be modified to be compatible with the pathways you will use.
+
+Link to [R code](Figure_R_code.Rmd)
