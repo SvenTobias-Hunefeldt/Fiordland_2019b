@@ -1,0 +1,1141 @@
+---
+title: "Figures"
+author: "Sven"
+date: "8/8/2019"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+##Notes
+```{r }
+Biolog_Metadat_Num = read.csv("Biolog_Metadata_Num.csv")
+
+#Colourblind friendly pallete
+cbbPalette <- c("#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+```
+#Set up - 16S
+library(phyloseq)
+```{r Import files}
+####Initial env. loading####
+setwd("~/Desktop/Fiordland_Biolog/R_Analysis/")
+Biolog_Metadat_Num_16S = read.csv("Biolog_Metadata_Num.csv")
+rownames(Biolog_Metadat_Num_16S) = Biolog_Metadat_Num_16S$X
+Biolog_Metadat_Num_16S = subset.data.frame(Biolog_Metadat_Num_16S, select = -1)
+
+map_file_16S <- paste("/Users/sven/Desktop/Fiordland_Biolog/R_Analysis/Biolog_Metadata_Num.csv", sep = ",")
+
+bmsd_16S <- import_qiime_sample_data(map_file_16S)
+
+#16S
+otutable_biom_file_16S <- paste("/Users/sven/Desktop/University/Y4/FY/Project_R_analysis/", "Merged_otu_table_json.biom", sep = "")
+
+Fiord_phyloseq_16S <- import_biom(otutable_biom_file_16S)
+sample_data(Fiord_phyloseq_16S) <- Biolog_Metadat_Num_16S
+
+#Fix Misslabel
+Fiord_phyloseq_16S@sam_data$Sample_Depth[Fiord_phyloseq_16S@sam_data$Sample_Depth == 1] = 0
+
+```
+##Create average result for multiple rarefaction by transforming data using (divide by 10) and check counts per sample
+```{r Create average result for multiple rarefaction by transforming data using (divide by 10), results='markup'}
+Fiord_phyloseq_16S = transform_sample_counts(Fiord_phyloseq_16S, function(x) x/10)
+sample_sums(Fiord_phyloseq_16S)
+```
+#### Round and confirm count number
+```{r Round and confirm count number, results='markup'}
+Fiord_phyloseq_16S = transform_sample_counts(Fiord_phyloseq_16S, round)
+sample_sums(Fiord_phyloseq_16S)
+Fiord_phyloseq_16S = prune_samples(sample_sums(Fiord_phyloseq_16S)>=1, Fiord_phyloseq_16S)
+sample_sums(Fiord_phyloseq_16S)
+```
+Check that all OTUs have representative counts  
+For here taxa = OTU  
+__Commands interpretation:__  
+_Total number of taxa in dataset:_ sum(taxa_sums(Fiord_phyloseq) > 0)   
+
+_Any taxa with no hits:_ any(taxa_sums(Fiord_phyloseq)== 0)
+```{r identify taxa with only zeros, results='markup', echo=TRUE}
+sum(taxa_sums(Fiord_phyloseq_16S) > 0)
+any(taxa_sums(Fiord_phyloseq_16S)== 0)
+sum(taxa_sums(Fiord_phyloseq_16S) == 0)
+any(taxa_sums(Fiord_phyloseq_16S) > 1)
+sum(taxa_sums(Fiord_phyloseq_16S) > 1)
+any(taxa_sums(Fiord_phyloseq_16S) < 1)
+sum(taxa_sums(Fiord_phyloseq_16S) < 1)
+```
+####Prune taxa with less than 1 count and check taxa numbers again
+```{r  Save original file and create new file with only present (no zeroes) taxa, results='markup', echo=TRUE}
+
+#Create new file with only present (no zeroes) taxa
+
+Fiord_phyloseq_16S = prune_taxa(taxa_sums(Fiord_phyloseq_16S) > 1, Fiord_phyloseq_16S)
+any(sample_sums(Fiord_phyloseq_16S) == 0)
+any(sample_sums(Fiord_phyloseq_16S) > 0)
+sum(taxa_sums(Fiord_phyloseq_16S) > 0)
+any(sample_sums(Fiord_phyloseq_16S) < 1)
+sum(taxa_sums(Fiord_phyloseq_16S) < 1)
+```
+##Compare sequences per sample or OTU
+library(ggplot2)
+```{r Compare sequences per sample or OTU}
+readsumsdf = data.frame(nreads = sort(taxa_sums(Fiord_phyloseq_16S),TRUE), sorted = 1:ntaxa(Fiord_phyloseq_16S), type = "OTU")
+readsumsdf = rbind(readsumsdf,data.frame(nreads = sort(sample_sums(Fiord_phyloseq_16S),TRUE),sorted = 1:nsamples(Fiord_phyloseq_16S), type = "Samples"))
+
+title = "Total number of reads"
+
+p = ggplot(readsumsdf, aes(x = sorted, y = nreads)) +
+  geom_bar(stat = "identity")
+
+p + ggtitle(title) +
+  scale_y_log10() +
+  facet_wrap(~type, 1, scales = "free")
+```
+##Check Variables
+```{r What sample variables exist in the phyloseq data}
+sample_variables(Fiord_phyloseq_16S)
+```
+```{r Attached OTU ID}
+tax_table(Fiord_phyloseq_16S) <- cbind(tax_table(Fiord_phyloseq_16S), OTU=taxa_names(Fiord_phyloseq_16S))
+```
+##Rename Ranks and subset
+```{r Rename Ranks}
+colnames(tax_table(Fiord_phyloseq_16S)) = c("Domain", "Phylum", "Class", "Order", "Family", "Genus", "Species", "OTU")
+tax_table(Fiord_phyloseq_16S) =gsub("D_0__", "", tax_table(Fiord_phyloseq_16S))
+tax_table(Fiord_phyloseq_16S) =gsub("D_1__", "", tax_table(Fiord_phyloseq_16S))
+tax_table(Fiord_phyloseq_16S) =gsub("D_2__", "", tax_table(Fiord_phyloseq_16S))
+tax_table(Fiord_phyloseq_16S) =gsub("D_3__", "", tax_table(Fiord_phyloseq_16S))
+tax_table(Fiord_phyloseq_16S) =gsub("D_4__", "", tax_table(Fiord_phyloseq_16S))
+tax_table(Fiord_phyloseq_16S) =gsub("D_5__", "", tax_table(Fiord_phyloseq_16S))
+tax_table(Fiord_phyloseq_16S) =gsub("D_6__", "", tax_table(Fiord_phyloseq_16S))
+
+```
+```{r Subset}
+Biolog_phyloseq_16S = Fiord_phyloseq_16S
+
+Biolog_phyloseq_16S@otu_table@.Data = t(as.matrix(Biolog_Metadat_Num[c(2:4,10:44,49,50)]))
+
+#Subset to in/out
+Fiord_phyloseq_16S_in_out = subset_samples(Fiord_phyloseq_16S, !Sample_type == "Transverse")
+
+#Subset horizontal community
+Fiord_phyloseq_16S_Horonly = subset_samples(Fiord_phyloseq_16S, Sample_type == "Transverse" & !Sample_Depth == "40" & !Sample_Depth == "100" & !Sample_Depth == "200" & !Sample_Depth == "360")
+
+#Subset vertical community
+Fiord_phyloseq_16S_Vert = subset_samples(Fiord_phyloseq_16S, !Sample_type == "in" & !Sample_type == "out")
+Fiord_phyloseq_16S_Vert = subset_samples(Fiord_phyloseq_16S_Vert, Sample_Site == "L5")
+```
+```{r Add detail to phyloseq objects}
+
+#Add distance to phyloseq_16S object
+Fiord_phyloseq_16S_Horonly@sam_data[["Distance_from_L1"]][grep("L1", Fiord_phyloseq_16S_Horonly@sam_data[["Sample_Site"]])] = 0
+Fiord_phyloseq_16S_Horonly@sam_data[["Distance_from_L1"]][grep("L2", Fiord_phyloseq_16S_Horonly@sam_data[["Sample_Site"]])] = as.numeric(5.59)
+Fiord_phyloseq_16S_Horonly@sam_data[["Distance_from_L1"]][grep("L3", Fiord_phyloseq_16S_Horonly@sam_data[["Sample_Site"]])] = as.numeric(14.3)
+Fiord_phyloseq_16S_Horonly@sam_data[["Distance_from_L1"]][grep("L4", Fiord_phyloseq_16S_Horonly@sam_data[["Sample_Site"]])] = as.numeric(10.67)
+Fiord_phyloseq_16S_Horonly@sam_data[["Distance_from_L1"]][grep("L5", Fiord_phyloseq_16S_Horonly@sam_data[["Sample_Site"]])] = as.numeric(8.47)
+Fiord_phyloseq_16S_Horonly@sam_data[["Distance_from_L1"]][grep("L6", Fiord_phyloseq_16S_Horonly@sam_data[["Sample_Site"]])] = as.numeric(4.73)
+Fiord_phyloseq_16S_Horonly@sam_data[["Distance_from_L1"]][grep("L7", Fiord_phyloseq_16S_Horonly@sam_data[["Sample_Site"]])] = as.numeric(3.16)
+Fiord_phyloseq_16S_Horonly@sam_data[["Distance_from_L1"]][grep("L8", Fiord_phyloseq_16S_Horonly@sam_data[["Sample_Site"]])] = as.numeric(2.47)
+
+```
+
+#Set up - 18S
+library(phyloseq)
+```{r Import files}
+####Initial env. loading####
+Biolog_Metadat_Num_18S = read.csv("18S_2017_map_test.csv")
+row.names(Biolog_Metadat_Num_18S) = Biolog_Metadat_Num_18S$SampleID
+
+Biolog_Metadat_Num_18S = subset.data.frame(Biolog_Metadat_Num_18S, select = -1)
+
+map_file_18S = paste("/Users/sven/Desktop/Fiordland_Biolog/R_Analysis/18S_2017_map_test.txt")
+
+bmsd_18S <- import_qiime_sample_data(map_file_18S)
+
+
+otutable_biom_file_18S <- paste("/Users/sven/Desktop/University/Fjordpaper/R/Required_Files/", "Merged_otu_table_6600.json", sep = "")
+
+#18S
+Fiord_phyloseq_18S <- import_biom(otutable_biom_file_18S)
+sample_data(Fiord_phyloseq_18S) <- Biolog_Metadat_Num_18S
+
+#Fix Misslabel
+#18S
+Fiord_phyloseq_18S@sam_data$Depth_m[Fiord_phyloseq_18S@sam_data$Depth_m == 1] = 0
+
+```
+##Create average result for multiple rarefaction by transforming data using (divide by 10) and check counts per sample
+```{r Create average result for multiple rarefaction by transforming data using (divide by 10), results='markup'}
+Fiord_phyloseq_18S = transform_sample_counts(Fiord_phyloseq_18S, function(x) x/10)
+sample_sums(Fiord_phyloseq_18S)
+```
+#### Round and confirm count number
+```{r Round and confirm count number, results='markup'}
+Fiord_phyloseq_18S = transform_sample_counts(Fiord_phyloseq_18S, round)
+sample_sums(Fiord_phyloseq_18S)
+Fiord_phyloseq_18S = prune_samples(sample_sums(Fiord_phyloseq_18S)>=1, Fiord_phyloseq_18S)
+sample_sums(Fiord_phyloseq_18S)
+```
+Check that all OTUs have representative counts  
+For here taxa = OTU  
+__Commands interpretation:__  
+_Total number of taxa in dataset:_ sum(taxa_sums(Fiord_phyloseq) > 0)   
+
+_Any taxa with no hits:_ any(taxa_sums(Fiord_phyloseq)== 0)
+```{r identify taxa with only zeros, results='markup', echo=TRUE}
+sum(taxa_sums(Fiord_phyloseq_18S) > 0)
+any(taxa_sums(Fiord_phyloseq_18S)== 0)
+sum(taxa_sums(Fiord_phyloseq_18S) == 0)
+any(taxa_sums(Fiord_phyloseq_18S) > 1)
+sum(taxa_sums(Fiord_phyloseq_18S) > 1)
+any(taxa_sums(Fiord_phyloseq_18S) < 1)
+sum(taxa_sums(Fiord_phyloseq_18S) < 1)
+```
+####Prune taxa with less than 1 count and check taxa numbers again
+```{r  Save original file and create new file with only present (no zeroes) taxa, results='markup', echo=TRUE}
+
+#Create new file with only present (no zeroes) taxa
+
+Fiord_phyloseq_18S = prune_taxa(taxa_sums(Fiord_phyloseq_18S) > 1, Fiord_phyloseq_18S)
+any(sample_sums(Fiord_phyloseq_18S) == 0)
+any(sample_sums(Fiord_phyloseq_18S) > 0)
+sum(taxa_sums(Fiord_phyloseq_18S) > 0)
+any(sample_sums(Fiord_phyloseq_18S) < 1)
+sum(taxa_sums(Fiord_phyloseq_18S) < 1)
+```
+##Compare sequences per sample or OTU
+```{r Compare sequences per sample or OTU}
+readsumsdf = data.frame(nreads = sort(taxa_sums(Fiord_phyloseq_18S),TRUE), sorted = 1:ntaxa(Fiord_phyloseq_18S), type = "OTU")
+readsumsdf = rbind(readsumsdf,data.frame(nreads = sort(sample_sums(Fiord_phyloseq_18S),TRUE),sorted = 1:nsamples(Fiord_phyloseq_18S), type = "Samples"))
+
+title = "Total number of reads"
+
+p = ggplot(readsumsdf, aes(x = sorted, y = nreads)) +
+  geom_bar(stat = "identity")
+
+p + ggtitle(title) +
+  scale_y_log10() +
+  facet_wrap(~type, 1, scales = "free")
+```
+##Check Variables
+```{r What sample variables exist in the phyloseq data}
+sample_variables(Fiord_phyloseq_18S)
+```
+```{r Attached OTU ID}
+tax_table(Fiord_phyloseq_18S) <- cbind(tax_table(Fiord_phyloseq_18S), OTU=taxa_names(Fiord_phyloseq_18S))
+```
+##Rename Ranks
+```{r Rename Ranks}
+colnames(tax_table(Fiord_phyloseq_18S)) = c("Domain", "Phylum", "Class", "Order", "Family", "Genus", "Species", "OTU")
+tax_table(Fiord_phyloseq_18S) =gsub("D_0__", "", tax_table(Fiord_phyloseq_18S))
+tax_table(Fiord_phyloseq_18S) =gsub("D_1__", "", tax_table(Fiord_phyloseq_18S))
+tax_table(Fiord_phyloseq_18S) =gsub("D_2__", "", tax_table(Fiord_phyloseq_18S))
+tax_table(Fiord_phyloseq_18S) =gsub("D_3__", "", tax_table(Fiord_phyloseq_18S))
+tax_table(Fiord_phyloseq_18S) =gsub("D_4__", "", tax_table(Fiord_phyloseq_18S))
+tax_table(Fiord_phyloseq_18S) =gsub("D_5__", "", tax_table(Fiord_phyloseq_18S))
+tax_table(Fiord_phyloseq_18S) =gsub("D_6__", "", tax_table(Fiord_phyloseq_18S))
+
+```
+```{r Subset}
+
+#Subset horizontal community
+Fiord_phyloseq_18S_Horonly = subset_samples(Fiord_phyloseq_18S, !Depth_m == "40" & !Depth_m == "100" & !Depth_m == "200" & !Depth_m == "360")
+
+#Subset vertical community
+Fiord_phyloseq_18S_Vert = subset_samples(Fiord_phyloseq_18S, Layer == "5")
+```
+```{r Add detail to phyloseq objects}
+
+#Add distance to phyloseq_18S object
+Fiord_phyloseq_18S_Horonly@sam_data[["Distance_from_L1"]][grep("1", Fiord_phyloseq_18S_Horonly@sam_data[["Layer"]])] = 0
+Fiord_phyloseq_18S_Horonly@sam_data[["Distance_from_L1"]][grep("2", Fiord_phyloseq_18S_Horonly@sam_data[["Layer"]])] = as.numeric(5.59)
+Fiord_phyloseq_18S_Horonly@sam_data[["Distance_from_L1"]][grep("3", Fiord_phyloseq_18S_Horonly@sam_data[["Layer"]])] = as.numeric(14.3)
+Fiord_phyloseq_18S_Horonly@sam_data[["Distance_from_L1"]][grep("4", Fiord_phyloseq_18S_Horonly@sam_data[["Layer"]])] = as.numeric(10.67)
+Fiord_phyloseq_18S_Horonly@sam_data[["Distance_from_L1"]][grep("5", Fiord_phyloseq_18S_Horonly@sam_data[["Layer"]])] = as.numeric(8.47)
+Fiord_phyloseq_18S_Horonly@sam_data[["Distance_from_L1"]][grep("6", Fiord_phyloseq_18S_Horonly@sam_data[["Layer"]])] = as.numeric(4.73)
+Fiord_phyloseq_18S_Horonly@sam_data[["Distance_from_L1"]][grep("7", Fiord_phyloseq_18S_Horonly@sam_data[["Layer"]])] = as.numeric(3.16)
+Fiord_phyloseq_18S_Horonly@sam_data[["Distance_from_L1"]][grep("8", Fiord_phyloseq_18S_Horonly@sam_data[["Layer"]])] = as.numeric(2.47)
+
+Fiord_phyloseq_18S_Horonly@sam_data[["Distance_from_L1"]][grep("1", Fiord_phyloseq_18S_Horonly@sam_data[["Layer"]])] = 0
+Fiord_phyloseq_18S_Horonly@sam_data[["Distance_from_L1"]][grep("2", Fiord_phyloseq_18S_Horonly@sam_data[["Layer"]])] = as.numeric(5.59)
+
+```
+#Exact test function
+```{r Exact test code}
+
+#check open packages
+(.packages())
+##Close all but phyloseq
+detachAllPackages <- function() {
+  
+  basic.packages <- c("package:stats","package:graphics","package:grDevices","package:utils","package:datasets","package:methods","package:base")
+  
+  package.list <- search()[ifelse(unlist(gregexpr("package:",search()))==1,TRUE,FALSE)]
+  
+  package.list <- setdiff(package.list,basic.packages)
+  
+  if (length(package.list)>0)  for (package in package.list) detach(package, character.only=TRUE)
+  
+}
+
+detachAllPackages()
+
+
+library("phyloseq")
+packageVersion("phyloseq")
+library("edgeR")
+packageVersion("edgeR")
+library(phyloseq)
+library(ggplot2)
+library(plyr)
+library(scales)
+library(reshape)
+library(RColorBrewer)
+library(grid)
+library(empiricalFDR.DESeq2)
+library("DESeq2")
+library(dplyr)
+library(Rmisc)
+
+
+#' Convert phyloseq OTU count data into DGEList for edgeR package
+#' 
+#' Further details.
+#' 
+#' @param physeq (Required).  A \code{\link{phyloseq-class}} or
+#'  an \code{\link{otu_table-class}} object. 
+#'  The latter is only appropriate if \code{group} argument is also a 
+#'  vector or factor with length equal to \code{nsamples(physeq)}.
+#'  
+#' @param group (Required). A character vector or factor giving the experimental
+#'  group/condition for each sample/library. Alternatively, you may provide
+#'  the name of a sample variable. This name should be among the output of
+#'  \code{sample_variables(physeq)}, in which case
+#'  \code{get_variable(physeq, group)} would return either a character vector or factor.
+#'  This is passed on to \code{\link[edgeR]{DGEList}},
+#'  and you may find further details or examples in its documentation.
+#'  
+#' @param method (Optional). The label of the edgeR-implemented normalization to use.
+#'  See \code{\link[edgeR]{calcNormFactors}} for supported options and details. 
+#'  The default option is \code{'RLE'}, which is a scaling factor method 
+#'  proposed by Anders and Huber (2010).
+#'  At time of writing, the \link[edgeR]{edgeR} package supported 
+#'  the following options to the \code{method} argument:
+#'  
+#'  \code{c('TMM', 'RLE', 'upperquartile', 'none')}.
+#'
+#' @param ... Additional arguments passed on to \code{\link[edgeR]{DGEList}}
+#' 
+#' @examples
+#' 
+phyloseq_to_edgeR = function(physeq, group, method = "RLE", ...) {
+  require("edgeR")
+  require("phyloseq")
+  # Enforce orientation.
+  if (!taxa_are_rows(physeq)) {
+    physeq <- t(physeq)
+  }
+  x = as(otu_table(physeq), "matrix")
+  # Add one to protect against overflow, log(0) issues.
+  x = x + 1
+  # Check `group` argument
+  if (identical(all.equal(length(group), 1), TRUE) & nsamples(physeq) > 1) {
+    # Assume that group was a sample variable name (must be categorical)
+    group = get_variable(physeq, group)
+  }
+  # Define gene annotations (`genes`) as tax_table
+  taxonomy = tax_table(physeq, errorIfNULL=FALSE)
+  if( !is.null(taxonomy) ){
+    taxonomy = data.frame(as(taxonomy, "matrix"))
+  } 
+  # Now turn into a DGEList
+  y = DGEList(counts = x, group = group, genes = taxonomy, remove.zeros = TRUE, 
+              ...)
+  # Calculate the normalization factors
+  z = calcNormFactors(y, method = method)
+  # Check for division by zero inside `calcNormFactors`
+  if (!all(is.finite(z$samples$norm.factors))) {
+    stop("Something wrong with edgeR::calcNormFactors on this data,\n         non-finite $norm.factors, consider changing `method` argument")
+  }
+  # Estimate dispersions
+  return(estimateTagwiseDisp(estimateCommonDisp(z)))
+}
+
+
+```
+#Figure 1
+##Panel a
+library(devtools)
+library(ggbiplot)
+```{r PCA for cross-fjord data}
+Cross_fjord_df = subset.data.frame(Biolog_Metadat_Num_16S, Sample_type == "in" | Sample_type == "out")
+Cross_fjord_df[10:40][Cross_fjord_df[10:40] < 0] <- 0
+####library(ggbiplot)####
+PCA_funct_C.ord = prcomp(Cross_fjord_df[10:40])
+summary(PCA_funct_C.ord)
+
+Sample_type_depth = c(Bin0 = 2, Bin10 = 0, Bout0 =17, Bout10 = 15, 
+                      Cin0 =2, Cin10 = 0, Cout0 =17, Cout10 = 15,
+                      Doin0 =2, Doin10 = 0, Doout0 =17, Doout10 = 15,
+                      Duin0 =2, Duin10 = 0, Duout0 =17, Duout10 = 15,
+                      Win0 =2, Win10 = 0, Wout0 =17, Wout10 = 15)
+
+Sample_Site_colour = c(B = "red", C = "green", Do = "black", Du = "blue", W = "purple")
+
+Depth_colour_list = c("0" = "red", "10" = "blue", "40" = "grey", "100" = "green", "200" = "black", "360" = "magenta")
+
+Cross_fjord_df$Region = 0
+Cross_fjord_df[["Region"]][grep("in", Cross_fjord_df[["Sample_type"]])] = "Head"
+Cross_fjord_df[["Region"]][grep("out", Cross_fjord_df[["Sample_type"]])] = "Mouth"
+
+PCA_C = ggbiplot(prcomp(Cross_fjord_df[10:40]), 
+                 labels = Cross_fjord_df$Region, 
+                 groups = as.factor(Cross_fjord_df$Sample_Depth),
+                 ellipse = T, 
+               var.axes = F) +
+  scale_colour_manual("Depth (m)", values = Depth_colour_list)+
+  scale_shape_manual(values = c("in" = "inner", "out" = "outer"))
+
+PCA_C
+
+ggsave("/Users/sven/Desktop/Fiordland_Biolog/R_Analysis/PCA_Crossfjord_Depth.pdf", width = 6, height = 5)
+
+
+
+```
+##Panel b
+```{r PCA for horizontal data}
+Horizontal_df = subset.data.frame(Biolog_Metadat_Num_16S, Sample_type == "Transverse" & !Sample_Depth == "40" & !Sample_Depth == "100" & !Sample_Depth == "200" & !Sample_Depth == "360")
+Horizontal_df[10:40][Horizontal_df[10:40] < 0] <- 0
+
+Horizontal_df$Sample_Site <- factor(Horizontal_df$Sample_Site,
+                         levels=(unique(Horizontal_df$Sample_Site)))
+
+levels(Horizontal_df$Sample_Site) = c(as.numeric(14.3), #L3
+                                               as.numeric(8.47), #L5
+                                               as.numeric(5.59), #L2
+                                               as.numeric(10.67), #L4
+                                               as.numeric(0), #L1
+                                               as.numeric(2.47), #L8
+                                               as.numeric(3.16), #L7
+                                               as.numeric(4.73) #L6
+                                               )
+Horizontal_df$Sample_Site = as.numeric(as.character(Horizontal_df$Sample_Site))
+
+PCA_funct_H.ord = prcomp(Horizontal_df[10:40])
+summary(PCA_funct_H.ord)
+
+PCA_Hor = ggbiplot(prcomp(Horizontal_df[10:40]), labels = Horizontal_df$Sample_Site, groups = as.factor(Horizontal_df$Sample_Depth), ellipse = T, var.axes = F)+
+  scale_color_manual("Depth (m)", values = Depth_colour_list)
+
+PCA_Hor
+
+ggsave("/Users/sven/Desktop/Fiordland_Biolog/R_Analysis/PCA_Horizontal_Depth.pdf", width = 6, height = 5)
+
+```
+##Place together
+```{r ggarrange figure 1}
+
+ pdf("/Users/sven/Desktop/Figure_1.pdf")
+
+ggarrange(
+  PCA_C +
+    xlim(-2,3),
+  PCA_Hor+
+    xlim(-3,2)+
+    ylim(-3,1.8),
+  legend = T,
+  lables = c("a", "b"),
+  font.label = list(size = 9),
+  hjust = -0.1,
+  vjust = 0,
+  heights = 2,
+  width = 4
+)
+
+
+dev.off()
+
+#Final touches carried out in Inkscape
+
+```
+
+#Figure 2
+##Panel b
+```{r Vertical AMR distribution}
+
+Vertical_df = subset.data.frame(Biolog_Metadat_Num_16S, Sample_type == "Transverse" & Sample_Site == "L5")
+Vertical_df[10:40][Vertical_df[10:40] < 0] <- 0
+
+Vertical_AMR_distribution <- ggplot(Vertical_df, 
+                        aes(x = Sample_Depth, 
+                            y = as.numeric(AMR)
+                            ))+
+  geom_line(aes(group = 1))+
+  geom_point()+
+  theme_bw()+
+  theme(legend.position = "right")+
+  xlab("Depth (m)")+
+  ylab("Average Metabolic Rate")
+
+Vertical_AMR_distribution
+
+pdf("AMR_vertical_rev.pdf")
+Vertical_AMR_distribution
+dev.off()
+
+```
+##Panel c
+```{r Vertical CMD distribution}
+
+#Vertical_df = subset.data.frame(Biolog_Metadat_Num, Sample_type == "Transverse" & Sample_Site == "L5")
+
+Vertical_CMD_distribution <- ggplot(Vertical_df, 
+                        aes(x=as.numeric(as.character(Sample_Depth)), 
+                            y=CMD
+                            ))+ 
+  geom_line(aes(group = 1)) + 
+  geom_point()+
+#  geom_errorbar(aes(ymin=(Abundance-se)*100, 
+ #                   ymax=(Abundance+se)*100), 
+  #              colour="black", 
+   #             position=pd
+    #            )+
+  theme_bw()+
+  theme(legend.position = "right", 
+        strip.background = element_blank())+
+  xlab("Depth (m)")+
+  ylab("Community Metabolic Diversity")+
+  labs(colour = "Depth (m)")
+
+Vertical_CMD_distribution
+
+pdf("CMD_vertical_rev.pdf")
+Vertical_CMD_distribution
+dev.off()
+
+
+```
+##Panel d
+```{r Combined Ab. and Production - Vertical}
+
+xlabels = c("0", "10", "40", "100", "200", "360")
+
+Vertical_df$Sample_Depth = as.factor(Vertical_df$Sample_Depth)
+is.factor(Vertical_df$Sample_Depth)
+#Make the plot
+par(mar = c(5,5,2,5)) #Define plot margins
+with(plot(Vertical_df$Sample_Depth, #X-axis 
+          Vertical_df$Bacterial_abundance, #Y-axis
+     col = "red",  #Colour
+     type = "o", #Plot type
+     xlab = "Sample Depth (m)", #X-axis label
+     ylab = "Bacterial abundance", #Y-axis label
+     ylim = c(0,1200000),
+     las = 2,
+     xaxt = "n")) +
+  log = "x"
+axis(1,las = 1, at = xlabels)
+
+par(new = T)
+with(plot(Vertical_df$Sample_Depth, #X-axis 
+          Vertical_df$Bacterial_activity, #Y-axis
+          col = "blue", #Make the line blue
+          type = "o", #Make it a line graph
+          xlab = NA, #Exclude the x axis label
+          ylab = NA, #Exclude the y axis label
+          ylim = c(0,4000), #Set y axis limit for salinity
+          axes = F, #Exclude the axes for this one
+          cex = 1,
+          las = 2)) #Normal size of plots
+
+axis(side = 4, 
+     las = 2) #Make the second axis on the right
+
+mtext(side = 4,
+      line = 2.75, "Bacterial production (pmol Leu/l/h)") #Define the second axis label.
+
+legend("topright",
+       legend = c("Bacterial abundance", "Bacterial production"),
+       lty = c(1,0), 
+       pch = c(NA,16), 
+       col = c("red", "blue"),
+       cex = 0.75)
+#Save the plot
+Vertical_Bacterial_combined = recordPlot()
+
+pdf("Bacterial_combined_vertical_rev.pdf")
+Vertical_Bacterial_combined
+dev.off()
+
+```
+##Panel e
+```{r}
+####Set up####
+#Vertical_df = subset.data.frame(Biolog_Metadat_Num, Sample_type == "Transverse" & Sample_Site == "L5")
+library(tibble)
+Plot_Vertical_Biolog_df = data_frame()
+for (i in 10:40) {
+  
+  c1 = colnames(Vertical_df[i]) #Extract column name
+  c1_df = Vertical_df[c(47)] #Extract Depth values
+  c1_df[c1] = Vertical_df[c(c1)] #Extract column of interest
+  colnames(c1_df)[colnames(c1_df) == c1] = "Value" #Rename column to Value.
+  c1_df$C_Source = c1 #Make a new column with the name of the specific Carbon source
+  
+  Plot_Vertical_Biolog_df = rbind(Plot_Vertical_Biolog_df, c1_df) #Attach this to a new df that is reorganised for good plotting using ggplot2. 
+  
+}
+
+#Introduce new column
+Plot_Vertical_Biolog_df$Source_type = as.factor("0")
+
+levels(Plot_Vertical_Biolog_df$Source_type) = c("Carbohydrate",
+                                             "Carboxylic_Acid",
+                                             "Amino_Acid",
+                                             "Polymer",
+                                             "Phosphorylated_chemical",
+                                             "Amine"
+                                               )
+
+#Carbohydrates
+Plot_Vertical_Biolog_df[["Source_type"]][grep("beta_Methyl_D_Glucoside", Plot_Vertical_Biolog_df[["C_Source"]])] = "Carbohydrate"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("Pyruvic_Acid_Methyl_Ester", Plot_Vertical_Biolog_df[["C_Source"]])] = "Carbohydrate"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("DXylose", Plot_Vertical_Biolog_df[["C_Source"]])] = "Carbohydrate"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("i_Erythritol", Plot_Vertical_Biolog_df[["C_Source"]])] = "Carbohydrate"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("DMannitol", Plot_Vertical_Biolog_df[["C_Source"]])] = "Carbohydrate"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("Nacetyl_DGlucosamine", Plot_Vertical_Biolog_df[["C_Source"]])] = "Carbohydrate"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("DCellobiose", Plot_Vertical_Biolog_df[["C_Source"]])] = "Carbohydrate"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("alpha_DLactose", Plot_Vertical_Biolog_df[["C_Source"]])] = "Carbohydrate"
+
+#Carboxylic acid
+Plot_Vertical_Biolog_df[["Source_type"]][grep("DGalactonic_Acid_gamma_Lactone", Plot_Vertical_Biolog_df[["C_Source"]])] = "Carboxylic_Acid"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("DGalacturonic_Acid", Plot_Vertical_Biolog_df[["C_Source"]])] = "Carboxylic_Acid"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("2_Hydroxy_Benzoic_Acid", Plot_Vertical_Biolog_df[["C_Source"]])] = "Carboxylic_Acid"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("4Hydroxy_Benzoic_Acid", Plot_Vertical_Biolog_df[["C_Source"]])] = "Carboxylic_Acid"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("gamma_Hydroxybutyric_Acid", Plot_Vertical_Biolog_df[["C_Source"]])] = "Carboxylic_Acid"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("DGlucosaminic_Acid", Plot_Vertical_Biolog_df[["C_Source"]])] = "Carboxylic_Acid"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("Itaconic_Acid", Plot_Vertical_Biolog_df[["C_Source"]])] = "Carboxylic_Acid"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("alpha_Ketobutyric_Acid", Plot_Vertical_Biolog_df[["C_Source"]])] = "Carboxylic_Acid"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("DMalic_Acid", Plot_Vertical_Biolog_df[["C_Source"]])] = "Carboxylic_Acid"
+
+#Amino acid
+Plot_Vertical_Biolog_df[["Source_type"]][grep("LArginine", Plot_Vertical_Biolog_df[["C_Source"]])] = "Amino_Acid"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("LAsparagine", Plot_Vertical_Biolog_df[["C_Source"]])] = "Amino_Acid"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("L_Phenylalanine", Plot_Vertical_Biolog_df[["C_Source"]])] = "Amino_Acid"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("LSerine", Plot_Vertical_Biolog_df[["C_Source"]])] = "Amino_Acid"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("L_Threonine", Plot_Vertical_Biolog_df[["C_Source"]])] = "Amino_Acid"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("Glycyl_LGlutamic_Acid", Plot_Vertical_Biolog_df[["C_Source"]])] = "Amino_Acid"
+
+#Polymer
+Plot_Vertical_Biolog_df[["Source_type"]][grep("Tween_40", Plot_Vertical_Biolog_df[["C_Source"]])] = "Polymer"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("Tween_80", Plot_Vertical_Biolog_df[["C_Source"]])] = "Polymer"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("alpha_Cyclodextrin", Plot_Vertical_Biolog_df[["C_Source"]])] = "Polymer"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("Glycogen", Plot_Vertical_Biolog_df[["C_Source"]])] = "Polymer"
+
+#Phosphorylated chemical
+Plot_Vertical_Biolog_df[["Source_type"]][grep("Glucose_1Phosphate", Plot_Vertical_Biolog_df[["C_Source"]])] = "Phosphorylated_chemical"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("DL_alpha_Glycerol_Phosphate", Plot_Vertical_Biolog_df[["C_Source"]])] = "Phosphorylated_chemical"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("Glucos_1Phosphate", Plot_Vertical_Biolog_df[["C_Source"]])] = "Phosphorylated_chemical"
+
+#Amine
+Plot_Vertical_Biolog_df[["Source_type"]][grep("Phenylethyl_amine", Plot_Vertical_Biolog_df[["C_Source"]])] = "Amine"
+Plot_Vertical_Biolog_df[["Source_type"]][grep("Putrescine", Plot_Vertical_Biolog_df[["C_Source"]])] = "Amine"
+
+####Plot relative abundance####
+
+Plot_Biolog_rel_V_df <- Plot_Vertical_Biolog_df
+Plot_Biolog_rel_V_df$Value[Plot_Biolog_rel_V_df$Value < 0] <- 0
+
+Plot_Biolog_rel_V_df <- Plot_Biolog_rel_V_df %>% 
+  group_by(Sample_Depth) %>% 
+  mutate(ValuePer=(Value/sum(Value))) %>% 
+  ungroup()
+
+Unique_Biolog_V_df <- distinct(Plot_Biolog_rel_V_df)
+
+Unique_Biolog_V_dfforplot <- aggregate(Unique_Biolog_V_df$ValuePer, by = list(Unique_Biolog_V_df$Source_type, Unique_Biolog_V_df$Sample_Depth), FUN = sum)
+
+colnames(Unique_Biolog_V_dfforplot)[1] <- "Source_type"
+colnames(Unique_Biolog_V_dfforplot)[2] <- "Sample_Depth"
+colnames(Unique_Biolog_V_dfforplot)[3] <- "Value"
+
+
+Biolog_V_rel_line = ggplot(Unique_Biolog_V_dfforplot) +
+  geom_line(aes(x = as.numeric(as.character(Sample_Depth)), y = Value, colour = Source_type, group = Source_type)) +
+  scale_y_continuous(labels = percent_format())+
+  xlab("Depth (m)")+
+  ylab("Realtive metabolic potential (%)")+
+  scale_color_manual("Carbon type", values = cbbPalette, labels = c("Carbohydrate", "Carboxylic acid", "Amino acid", "Polymer", "Phosphorylated chemical", "Amine"))+
+  theme_bw()
+
+Biolog_V_rel_line
+
+ggplot2::ggsave("Biolog_rel_Vertical_line_rev.pdf")
+
+
+
+```
+##Panel f
+library(vegan)
+```{r Vertical dissimilarity - taxa and function}
+
+####Set up####
+Vertical_df = subset.data.frame(Biolog_Metadat_Num_16S, Sample_type == "Transverse" & Sample_Site == "L5")
+Vertical_df[10:40][Vertical_df[10:40] < 0] <- 0
+
+#Carry out bray distance calculations
+Diss_V_taxa_16S = vegdist(t(Fiord_phyloseq_16S_Vert@otu_table), method = "bray")
+Diss_V_taxa_18S = vegdist(t(Fiord_phyloseq_18S_Vert@otu_table), method = "bray")
+Diss_V_funct = vegdist(Vertical_df[c(10:40)], method = "bray")
+
+#Make into df
+Diss_V_taxa_16S = as.data.frame(as.matrix(Diss_V_taxa_16S))
+Diss_V_taxa_18S = as.data.frame(as.matrix(Diss_V_taxa_18S))
+Diss_V_funct = as.data.frame(as.matrix(Diss_V_funct))
+
+#Export for reassembly
+#write.csv(Diss_V_taxa_16S, "Diss_V_taxa_16S.csv")
+#write.csv(Diss_V_taxa_18S, "Diss_V_taxa_18S.csv")
+#write.csv(Diss_V_funct, "Diss_V_funct.csv")
+
+#Read in reassembled df for plotting - record taxatype under "Taxa_type" column.
+Diss_V_df = read.csv("Diss_V.csv")
+class(Diss_V_df$Dissimilarity)
+####Plot####
+
+#Make colour for diss. type
+Diss_V_plot = ggplot(Diss_V_df, aes(x = Depth, y = Dissimilarity, colour = Diss_type, group = Diss_type))+
+  geom_point()+
+  geom_line()+
+  xlab("Depth (m)")+
+  ylab("Dissimilarity from the surface")+
+  #scale_y_reverse()+
+  #scale_x_log10()+
+  scale_color_manual("Dissimilarity", values = cbbPalette, labels = c("16S Community", "18S Community", "Metabolic potential"))+
+  theme_bw()
+
+Diss_V_plot
+#Although evrything massively differs from the surface, the functional one remains more surface like than the other, suggesting that more function is being retained as opposed to taxa diversity, pointing towards a small range of organisms that can carry out a wide variety of functions.
+
+pdf("Diss_Depth_V_rev.pdf")
+Diss_V_plot
+dev.off()
+
+```
+##Put then together
+library(ggpubr)
+```{r ggarrange figure 2}
+
+leftside = ggarrange(ggplot(),
+          Vertical_CMD_distribution,
+          Biolog_V_rel_line,
+  legend = T,
+  heights = 3,
+  widths = 1,
+  ncol = 1,
+  nrow = 3
+  )
+leftside
+
+rightside = ggarrange(Vertical_AMR_distribution,
+  Vertical_Bacterial_combined,
+  Diss_V_plot,
+  font.label = list(size = 9),
+  legend = T,
+  ncol = 1,
+  nrow = 3
+  )
+rightside
+
+Whole = ggarrange(leftside,
+                  rightside,
+                  font.label = list(size = 8),
+                  heights = 6,
+                  widths = 3)
+Whole
+
+pdf("Figure_2_rev.pdf")
+Whole
+dev.off()
+```
+
+
+#Mantel statistics
+library(vegan)
+```{r Subset crossfjord stuff}
+Cross_fjord_df_surf = subset(Cross_fjord_df, Sample_Depth == "0")
+Cross_fjord_df_10m = subset(Cross_fjord_df, Sample_Depth == "10")
+Cross_fjord_df_in = subset(Cross_fjord_df, Sample_type == "in")
+Cross_fjord_df_out = subset(Cross_fjord_df, Sample_type == "out")
+
+```
+```{r Subset horizontal stuff}
+Horizontal_df = Horizontal_df_16S
+```
+```{r Subset vertical stuff}
+Vertical_df = Vertical_df_16S
+Vertical_df_surfvsdeep = Vertical_df 
+
+Vertical_df_surfvsdeep$Depth_type = "0"
+
+Vertical_df_surfvsdeep[["Depth_type"]][grep("0", Vertical_df_surfvsdeep[["Sample_Depth"]])] = "Surface"
+Vertical_df_surfvsdeep[["Depth_type"]][grep("10", Vertical_df_surfvsdeep[["Sample_Depth"]])] = "Deep"
+Vertical_df_surfvsdeep[["Depth_type"]][grep("40", Vertical_df_surfvsdeep[["Sample_Depth"]])] = "Deep"
+Vertical_df_surfvsdeep[["Depth_type"]][grep("100", Vertical_df_surfvsdeep[["Sample_Depth"]])] = "Deep"
+Vertical_df_surfvsdeep[["Depth_type"]][grep("200", Vertical_df_surfvsdeep[["Sample_Depth"]])] = "Deep"
+Vertical_df_surfvsdeep[["Depth_type"]][grep("360", Vertical_df_surfvsdeep[["Sample_Depth"]])] = "Deep"
+
+``
+
+```{r Crossfjord community & biolog mantel}
+
+Dist_Comm_C = phyloseq::distance(Fiord_phyloseq_16S_in_out, method = "bray")
+Dist_Biolog_C = dist(Cross_fjord_df[10:40])
+mantel(Dist_Comm_C, Dist_Biolog_C, method = "p", permutations = 999)
+#No correlation exists
+
+```
+```{r Horizontal community & biolog mantel}
+
+#Isolate eukaryota for 18S stuff
+Fiord_phyloseq_18S_Horonly_Euk = subset_taxa(Fiord_phyloseq_18S_Horonly, Domain == "Eukaryota")
+Horizontal_df_Euk = as.data.frame(as.matrix(Fiord_phyloseq_18S_Horonly_Euk@sam_data))
+
+
+Dist_Comm_H = phyloseq::distance(Fiord_phyloseq_16S_Horonly, method = "bray")
+Dist_Biolog_H = dist(Horizontal_df[9:39])
+mantel(Dist_Comm_H, Dist_Biolog_H, method = "p", permutations = 999)
+#No correlation exists
+
+Dist_Comm_H = phyloseq::distance(Fiord_phyloseq_18S_Horonly_Euk, method = "bray")
+Dist_Biolog_H = dist(Horizontal_df_Euk[9:39])
+mantel(Dist_Comm_H, Dist_Biolog_H, method = "p", permutations = 999, na.rm = T)
+#No correlation exists
+```
+```{r Vertical community & biolog mantel}
+#Isolate eukaryota for 18S stuff
+Fiord_phyloseq_18S_Vert_Euk = subset_taxa(Fiord_phyloseq_18S_Vert, Domain == "Eukaryota")
+
+Dist_ab_V = phyloseq::distance(Fiord_phyloseq_16S_Vert, method = "bray")
+Dist_act_V = dist(Vertical_df[10:40])
+mantel(Dist_ab_V, Dist_act_V, method = "s")
+#They do not match
+
+Dist_ab_V = phyloseq::distance(Fiord_phyloseq_18S_Vert_Euk, method = "bray")
+Dist_act_V = dist(Vertical_df[10:40])
+mantel(Dist_ab_V, Dist_act_V, method = "s")
+#They do not match
+```
+#Supplementary
+##S1
+```{r NMDS for cross-fjord data}
+
+Fiord_phyloseq_in_out = merge_phyloseq(Fiord_phyloseq_16S_in_out)
+
+NMDS.ord_inout <- ordinate(Fiord_phyloseq_in_out, method = "NMDS", distance = "bray")
+sample_data(Fiord_phyloseq_in_out)$Sample_Depth<-as.factor(sample_data(Fiord_phyloseq_in_out)$Sample_Depth)
+
+Sample_type_depth = c(Bin0 = 2, Bin10 = 0, Bout0 =17, Bout10 = 15, 
+                      Cin0 =2, Cin10 = 0, Cout0 =17, Cout10 = 15,
+                      Doin0 =2, Doin10 = 0, Doout0 =17, Doout10 = 15,
+                      Duin0 =2, Duin10 = 0, Duout0 =17, Duout10 = 15,
+                      Win0 =2, Win10 = 0, Wout0 =17, Wout10 = 15)
+
+Sample_Site_colour = c(B = "red", C = "green", Do = "black", Du = "blue", W = "purple")
+
+NMDS_Multi = plot_ordination(Fiord_phyloseq_in_out, NMDS.ord_inout, shape = "New_Name", color = "Sample_Site") + 
+ scale_shape_manual("Sample location", values=Sample_type_depth, labels = c("In0","In10", "Out0", "Out10"), breaks = c("In0","In10", "Out0", "Out10")) + 
+  scale_colour_manual("Fjord of origin",values = Sample_Site_colour, breaks = c("B", "C", "Do", "Du", "W"), labels = c("Breaksea Sound", "Chalky Inlet", "Doubtful Sound", "Dusky Sound", "Wet Jacket Arm"))+
+  theme(legend.position = "right")+
+  stat_ellipse(aes(group = Sample_Depth))
+#open triangle = in0
+#open square = in10
+#closed triangle = out0
+#closed square = out10
+#red = Breaksea
+#green = Chalky
+#black = Doubtful
+#Blue = Dusky
+#Purple = Wet_Jacket
+NMDS_Multi
+
+pdf("Five_fjord.pdf")
+last_plot()
+dev.off()
+```
+##S2
+```{r Prokaryotic community NMDS}
+
+NMDS.ord_Hor_16S <- ordinate(Fiord_phyloseq_16S_Horonly, method = "NMDS", distance = "bray")
+sample_data(Fiord_phyloseq_16S_Horonly)$Sample_Depth<-as.factor(sample_data(Fiord_phyloseq_16S_Horonly)$Sample_Depth)
+
+Depth_colour_list = c("0" = "red", "10" = "blue", "40" = "grey", "100" = "green", "200" = "black", "360" = "magenta")
+
+NMDS_Hor_16S = plot_ordination(Fiord_phyloseq_16S_Horonly, 
+                             NMDS.ord_Hor_16S, 
+                             label = "Distance_from_L1", 
+                             color = "Sample_Depth") +
+geom_point(size = 4)+ 
+  scale_color_manual("Sample \nDepth (m)", values = Depth_colour_list, breaks = c("0", "10"), labels = c("0", "10"))+
+  theme(legend.position = "right")+
+  geom_label(label = Fiord_phyloseq_16S_Horonly@sam_data[["Distance_from_L1"]])+
+  stat_ellipse(aes(group = Sample_Depth))
+
+NMDS_Hor_16S
+pdf("16S_Hor_NMDS.pdf")
+last_plot()
+dev.off()
+
+```
+##S3
+```{r Eukaryotic community NMDS }
+
+NMDS.ord_Hor_18S <- ordinate(Fiord_phyloseq_18S_Horonly, method = "NMDS", distance = "bray")
+sample_data(Fiord_phyloseq_18S_Horonly)$Sample_Depth<-as.factor(sample_data(Fiord_phyloseq_18S_Horonly)$Depth_m)
+
+
+NMDS_Hor_18S = plot_ordination(Fiord_phyloseq_18S_Horonly, 
+                             NMDS.ord_Hor_18S, 
+                             label = "Distance_from_L1", 
+                             color = "Sample_Depth") +
+geom_point(size = 4)+ 
+  scale_color_manual("Sample \nDepth (m)", values = Depth_colour_list, breaks = c("0", "10"), labels = c("0", "10"))+
+  theme(legend.position = "right")+
+  geom_label(label = Fiord_phyloseq_18S_Horonly@sam_data[["Distance_from_L1"]])+
+  stat_ellipse(aes(group = Sample_Depth))
+
+NMDS_Hor_18S
+pdf("18S_Hor_NMDS.pdf")
+last_plot()
+dev.off()
+```
+##S4
+```{r Horizontal AMR distribution}
+Horizontal_df = subset.data.frame(Biolog_Metadat_Num_16S, Sample_type == "Transverse" & !Sample_Depth == "40" & !Sample_Depth == "100" & !Sample_Depth == "200" & !Sample_Depth == "360")
+Horizontal_df[10:40][Horizontal_df[10:40] < 0] <- 0
+
+Horizontal_df$Sample_Site <- factor(Horizontal_df$Sample_Site,
+                         levels=(unique(Horizontal_df$Sample_Site)))
+
+levels(Horizontal_df$Sample_Site) = c(as.numeric(14.3), #L3
+                                               as.numeric(8.47), #L5
+                                               as.numeric(5.59), #L2
+                                               as.numeric(10.67), #L4
+                                               as.numeric(0), #L1
+                                               as.numeric(2.47), #L8
+                                               as.numeric(3.16), #L7
+                                               as.numeric(4.73) #L6
+                                               )
+Horizontal_df$Sample_Site = as.numeric(as.character(Horizontal_df$Sample_Site))
+
+Horizontal_AMR_distribution <- ggplot(Horizontal_df, 
+                        aes(x=Sample_Site, 
+                            y=AMR, 
+                            colour=as.factor(as.character(Sample_Depth)),
+                            group = as.factor(as.character(Sample_Depth))))+ 
+  geom_smooth(stat = "identity") + 
+  geom_point(stat = "identity")+
+#  geom_errorbar(aes(ymin=(Abundance-se)*100, 
+ #                   ymax=(Abundance+se)*100), 
+  #              colour="black", 
+   #             position=pd
+    #            )+
+  theme_bw()+
+  theme(legend.position = "right", 
+        strip.background = element_blank())+
+  xlab("Km from the outermost sample")+
+  ylab("Average Metabolic Rate")+
+  labs(colour = "Depth (m)")+
+  scale_color_manual(values = Depth_colour_list)
+
+Horizontal_AMR_distribution
+
+pdf("AMR_Dist_horizontal.pdf")
+Horizontal_AMR_distribution
+dev.off()
+
+```
+##Table S1
+```{r Subset crossfjord stuff}
+Cross_fjord_df_surf = subset(Cross_fjord_df, Sample_Depth == "0")
+Cross_fjord_df_10m = subset(Cross_fjord_df, Sample_Depth == "10")
+Cross_fjord_df_in = subset(Cross_fjord_df, Sample_type == "in")
+Cross_fjord_df_out = subset(Cross_fjord_df, Sample_type == "out")
+
+```
+```{r Subset horizontal stuff}
+Horizontal_df = Horizontal_df_16S
+```
+```{r Subset vertical stuff}
+Vertical_df = Vertical_df_16S
+Vertical_df_surfvsdeep = Vertical_df 
+
+Vertical_df_surfvsdeep$Depth_type = "0"
+
+Vertical_df_surfvsdeep[["Depth_type"]][grep("0", Vertical_df_surfvsdeep[["Sample_Depth"]])] = "Surface"
+Vertical_df_surfvsdeep[["Depth_type"]][grep("10", Vertical_df_surfvsdeep[["Sample_Depth"]])] = "Deep"
+Vertical_df_surfvsdeep[["Depth_type"]][grep("40", Vertical_df_surfvsdeep[["Sample_Depth"]])] = "Deep"
+Vertical_df_surfvsdeep[["Depth_type"]][grep("100", Vertical_df_surfvsdeep[["Sample_Depth"]])] = "Deep"
+Vertical_df_surfvsdeep[["Depth_type"]][grep("200", Vertical_df_surfvsdeep[["Sample_Depth"]])] = "Deep"
+Vertical_df_surfvsdeep[["Depth_type"]][grep("360", Vertical_df_surfvsdeep[["Sample_Depth"]])] = "Deep"
+
+```
+##Adonis and ANOSIM tests for comm and Biolog
+library(vegan)
+```{r Crossfjord mantel}
+
+####Community####
+Depth_group = get_variable(Fiord_phyloseq_16S_in_out@sam_data, "Sample_Depth")
+Depth_ano = vegan::anosim(phyloseq::distance(Fiord_phyloseq_16S_in_out, method = "bray"), Depth_group)
+Depth_ano$signif
+Depth_ano$statistic
+#R = 0.248
+#p = 0.002
+
+Depth_group = get_variable(Fiord_phyloseq_16S_in_out@sam_data, "Sample_Depth")
+df_tran = as(Fiord_phyloseq_16S_in_out@sam_data, "data.frame")
+df_tran.dist = phyloseq::distance(Fiord_phyloseq_16S_in_out, method = "bray")
+Depth_ado = adonis(df_tran.dist ~ Depth_group)
+
+Depth_ado
+#R = 0.226
+#p = 0.001
+
+####Biolog####
+
+Depth_group = get_variable(Cross_fjord_df, "Sample_Depth")
+Depth_ano = anosim(dist(Cross_fjord_df[10:40]), Depth_group)
+Depth_ano$signif
+Depth_ano$statistic
+#R = 0.108
+#p = 0.039
+
+
+Depth_group = get_variable(Horizontal_df, "Sample_Depth")
+df_tran = as(Horizontal_df, "data.frame")
+df_tran.dist = dist(Horizontal_df)
+Depth_ado = adonis(df_tran.dist ~ Depth_group)
+
+Depth_ado
+#R = 0.261
+#p = 0.017
+
+```
+```{r Horizontal mantel}
+
+####Community####
+Depth_group = get_variable(Fiord_phyloseq_16S_Horonly@sam_data, "Sample_Depth")
+Depth_ano = vegan::anosim(phyloseq::distance(Fiord_phyloseq_16S_Horonly, method = "bray"), Depth_group)
+Depth_ano$signif
+Depth_ano$statistic
+#R = 0.566
+#p = 0.001
+
+Depth_group = get_variable(Fiord_phyloseq_16S_Horonly@sam_data, "Sample_Depth")
+df_tran = as(Fiord_phyloseq_16S_Horonly@sam_data, "data.frame")
+df_tran.dist = phyloseq::distance(Fiord_phyloseq_16S_Horonly, method = "bray")
+Depth_ado = adonis(df_tran.dist ~ Depth_group)
+
+Depth_ado
+#R = 0.240
+#p = 0.001
+
+Depth_group = get_variable(Fiord_phyloseq_18S_Horonly@sam_data, "Depth_m")
+Depth_ano = vegan::anosim(phyloseq::distance(Fiord_phyloseq_18S_Horonly, method = "bray"), Depth_group)
+Depth_ano$signif
+Depth_ano$statistic
+#R = 0.651
+#p = 0.001
+
+Depth_group = get_variable(Fiord_phyloseq_18S_Horonly@sam_data, "Depth_m")
+df_tran = as(Fiord_phyloseq_18S_Horonly@sam_data, "data.frame")
+df_tran.dist = phyloseq::distance(Fiord_phyloseq_18S_Horonly, method = "bray")
+Depth_ado = adonis(df_tran.dist ~ Depth_group)
+
+Depth_ado
+#R = 0.192
+#p = 0.001
+
+
+####Biolog####
+Depth_group = get_variable(Horizontal_df, "Sample_Depth")
+Depth_ano = anosim(dist(Horizontal_df[10:40]), Depth_group)
+Depth_ano$signif
+Depth_ano$statistic
+#R = -0.050
+#p = 0.676
+
+Depth_group = get_variable(Horizontal_df, "Sample_Depth")
+df_tran = as(Horizontal_df[10:43], "data.frame")
+df_tran.dist = dist(Horizontal_df[10:43])
+Depth_ado = adonis(df_tran.dist ~ Depth_group)
+
+Depth_ado
+#R = 0.286
+#p = 0.019
+
+```
+```{r Vertical mantel}
+
+####Community####
+
+#Anosim - 16S
+Depth_group = get_variable(Fiord_phyloseq_16S_Vert@sam_data, "Sample_Depth")
+Depth_ano = anosim(distance(Fiord_phyloseq_16S_Vert, method = "bray"), Depth_group)
+Depth_ano$signif
+Depth_ano$statistic
+#R = 0.728
+#p = 0.001
+
+#Adonis - 16S
+Depth_group = get_variable(Fiord_phyloseq_16S_Vert@sam_data, "Sample_Depth")
+df_tran = as(Fiord_phyloseq_16S_Vert@sam_data, "data.frame")
+df_tran.dist = distance(Fiord_phyloseq_16S_Vert, method = "bray")
+Depth_ado = adonis(df_tran.dist ~ Depth_group)
+
+Depth_ado
+#R = 0.153
+#p = 0.016
+
+#Anosim - 18S
+Depth_group = get_variable(Fiord_phyloseq_18S_Vert@sam_data, "Depth_m")
+Depth_ano = anosim(distance(Fiord_phyloseq_18S_Vert, method = "bray"), Depth_group)
+Depth_ano$signif
+Depth_ano$statistic
+#R = 0.192
+#p = 0.001
+
+#Adonis - 18S
+Depth_group = get_variable(Fiord_phyloseq_18S_Vert@sam_data, "Depth_m")
+df_tran = as(Fiord_phyloseq_18S_Vert@sam_data, "data.frame")
+df_tran.dist = distance(Fiord_phyloseq_18S_Vert, method = "bray")
+Depth_ado = adonis(df_tran.dist ~ Depth_group)
+
+Depth_ado
+#R = 0.153
+#p = 0.016
+
+####Biolog####
+
+#Anosim
+Depth_group = get_variable(Vertical_df, "Sample_Depth")
+Depth_ano = anosim(dist(Vertical_df[10:40]), Depth_group)
+Depth_ano$signif
+Depth_ano$statistic
+
+#Adonis
+Depth_group = get_variable(Vertical_df, "Sample_Depth")
+df_tran = as(Vertical_df, "data.frame")
+df_tran.dist = dist(Vertical_df)
+Depth_ado = adonis(df_tran.dist ~ Depth_group)
+
+Depth_ado
+#R = 0.153
+#p = 0.016
+
+```
